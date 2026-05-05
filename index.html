@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>DocFlow — Word to PDF</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap');
 
@@ -912,51 +913,86 @@ async function startConvert() {
       el.style.cssText = 'margin:0 0 8pt;padding-left:20pt;';
     });
 
-    setProgress(70, 'PDF出力中...');
-
-    // Paper dimensions
-    const formatMap = { a4: 'a4', letter: 'letter', a3: 'a3' };
-    const dims = {
-      a4: [210, 297], letter: [215.9, 279.4], a3: [297, 420]
+    // 用紙サイズ定義(mm)
+    const paperSizes = {
+      a4:     { w: 210, h: 297 },
+      letter: { w: 215.9, h: 279.4 },
+      a3:     { w: 297, h: 420 }
     };
-    let [w, h] = dims[paper] || [210, 297];
-    if (orientation === 'landscape') [w, h] = [h, w];
+    let { w: pw, h: ph } = paperSizes[paper] || paperSizes.a4;
+    if (orientation === 'landscape') { [pw, ph] = [ph, pw]; }
 
     const baseName = selectedFile.name.replace(/\.docx$/i, '');
 
-    // コンテナをbodyに追加して描画を待つ
-    document.body.appendChild(container);
-    container.style.position = 'absolute';
+    // コンテナをDOMに追加（画面外）してレンダリング
+    container.style.position = 'fixed';
+    container.style.top = '0';
     container.style.left = '-9999px';
-    container.style.width = '794px'; // A4幅相当(px)
-    container.style.background = 'white';
+    container.style.width = (pw * 3.7795) + 'px'; // mm→px変換(96dpi)
+    container.style.background = '#ffffff';
+    container.style.padding = margin + 'mm';
+    document.body.appendChild(container);
 
-    // レンダリング完了を待つ
-    await new Promise(r => setTimeout(r, 300));
-
+    // フォント・画像ロード完了を待つ
+    await new Promise(r => setTimeout(r, 500));
     setProgress(70, 'PDF出力中...');
 
-    const opt = {
-      margin: margin,
-      filename: baseName + '.pdf',
-      image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: {
-        scale,
-        useCORS: true,
-        logging: false,
-        backgroundColor: '#ffffff',
-        windowWidth: 794
-      },
-      jsPDF: { unit: 'mm', format: formatMap[paper] || 'a4', orientation },
-      pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
-    };
-
-    // toBlob() で取得 → save()を呼ばないのでtxtファイルは生成されない
-    const worker = html2pdf().set(opt).from(container);
-    // toPdf→get('pdf')→output('blob') が最も確実。save()を呼ばないのでtxtは生成されない
-    const pdfBlob = await worker.toPdf().get('pdf').then(pdf => pdf.output('blob'));
+    // html2canvasでキャプチャ
+    const canvas = await html2canvas(container, {
+      scale: scale,
+      useCORS: true,
+      logging: false,
+      backgroundColor: '#ffffff',
+      windowWidth: container.offsetWidth,
+      width: container.offsetWidth,
+      height: container.scrollHeight
+    });
 
     document.body.removeChild(container);
+
+    setProgress(85, 'PDFを組み立て中...');
+
+    // jsPDFで直接PDF生成（save()を呼ばない）
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({
+      orientation: orientation,
+      unit: 'mm',
+      format: [pw, ph]
+    });
+
+    const imgData = canvas.toDataURL('image/jpeg', 0.95);
+    const pageW = pw - margin * 2;
+    const pageH = ph - margin * 2;
+    const imgW = pageW;
+    const imgH = (canvas.height * pageW) / canvas.width;
+
+    let yPos = margin;
+    let remainH = imgH;
+    let srcY = 0;
+
+    // 複数ページ対応
+    while (remainH > 0) {
+      const sliceH = Math.min(remainH, pageH);
+      const sliceCanvas = document.createElement('canvas');
+      const sliceRatio = canvas.height / imgH;
+      sliceCanvas.width = canvas.width;
+      sliceCanvas.height = Math.ceil(sliceH * sliceRatio);
+      const ctx = sliceCanvas.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, sliceCanvas.width, sliceCanvas.height);
+      ctx.drawImage(canvas, 0, Math.ceil(srcY * sliceRatio), canvas.width, sliceCanvas.height, 0, 0, sliceCanvas.width, sliceCanvas.height);
+      const sliceData = sliceCanvas.toDataURL('image/jpeg', 0.95);
+      pdf.addImage(sliceData, 'JPEG', margin, yPos, imgW, sliceH);
+      remainH -= sliceH;
+      srcY += sliceH;
+      if (remainH > 0) {
+        pdf.addPage([pw, ph], orientation);
+        yPos = margin;
+      }
+    }
+
+    // save()を呼ばずblobで取得 → txtファイルは生成されない
+    const pdfBlob = pdf.output('blob');
 
     // Blobを保持
     currentPdfBlob = pdfBlob;
