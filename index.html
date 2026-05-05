@@ -1,0 +1,963 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>DocFlow — Word to PDF</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+  :root {
+    --ink: #1a1410;
+    --paper: #faf8f4;
+    --cream: #f0ece3;
+    --accent: #c8501a;
+    --accent-light: #f4e8e1;
+    --gold: #c9a84c;
+    --muted: #8a7f72;
+    --border: #ddd8cc;
+    --success: #2d7d4e;
+    --radius: 16px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--paper);
+    color: var(--ink);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 0;
+    overflow-x: hidden;
+  }
+
+  /* ── Header ── */
+  header {
+    width: 100%;
+    background: var(--ink);
+    color: var(--paper);
+    padding: 28px 40px 24px;
+    display: flex;
+    align-items: flex-end;
+    gap: 16px;
+    position: relative;
+    overflow: hidden;
+  }
+  header::before {
+    content: '';
+    position: absolute;
+    top: -40px; right: -40px;
+    width: 200px; height: 200px;
+    border-radius: 50%;
+    background: var(--accent);
+    opacity: 0.18;
+  }
+  .logo-mark {
+    width: 48px; height: 48px;
+    background: var(--accent);
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'DM Serif Display', serif;
+    font-size: 22px;
+    color: white;
+    flex-shrink: 0;
+  }
+  .header-text h1 {
+    font-family: 'DM Serif Display', serif;
+    font-size: 26px;
+    font-weight: 400;
+    letter-spacing: -0.3px;
+    line-height: 1;
+  }
+  .header-text p {
+    font-size: 13px;
+    color: rgba(250,248,244,0.55);
+    margin-top: 4px;
+    font-weight: 300;
+  }
+
+  /* ── Main ── */
+  main {
+    width: 100%;
+    max-width: 800px;
+    padding: 40px 24px 60px;
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+  }
+
+  /* ── Drop Zone ── */
+  .drop-zone {
+    border: 2.5px dashed var(--border);
+    border-radius: var(--radius);
+    background: var(--cream);
+    padding: 56px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    position: relative;
+    overflow: hidden;
+  }
+  .drop-zone::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--accent);
+    opacity: 0;
+    transition: opacity 0.25s;
+    pointer-events: none;
+  }
+  .drop-zone.drag-over {
+    border-color: var(--accent);
+    background: var(--accent-light);
+  }
+  .drop-zone.drag-over::after { opacity: 0.04; }
+  .drop-zone.has-file {
+    border-color: var(--success);
+    background: #edf7f1;
+  }
+
+  .drop-icon {
+    width: 72px; height: 72px;
+    margin: 0 auto 20px;
+    background: white;
+    border-radius: 20px;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    font-size: 36px;
+    transition: transform 0.3s ease;
+  }
+  .drop-zone:hover .drop-icon { transform: translateY(-4px); }
+
+  .drop-title {
+    font-family: 'DM Serif Display', serif;
+    font-size: 22px;
+    margin-bottom: 8px;
+  }
+  .drop-sub {
+    font-size: 14px;
+    color: var(--muted);
+    margin-bottom: 24px;
+  }
+  .btn-browse {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--ink);
+    color: var(--paper);
+    border: none;
+    padding: 14px 28px;
+    border-radius: 50px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 15px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .btn-browse:hover { background: var(--accent); transform: scale(1.02); }
+  .btn-browse:active { transform: scale(0.97); }
+
+  input[type="file"] { display: none; }
+
+  /* ── File Card ── */
+  .file-card {
+    background: white;
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    animation: slideIn 0.3s ease;
+  }
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .file-icon {
+    width: 52px; height: 52px;
+    background: #e8f4fe;
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 26px;
+    flex-shrink: 0;
+  }
+  .file-info { flex: 1; min-width: 0; }
+  .file-name {
+    font-weight: 500;
+    font-size: 15px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .file-size {
+    font-size: 13px;
+    color: var(--muted);
+    margin-top: 3px;
+  }
+  .btn-remove {
+    width: 36px; height: 36px;
+    border: 1.5px solid var(--border);
+    border-radius: 50%;
+    background: white;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+    color: var(--muted);
+    transition: all 0.2s;
+    flex-shrink: 0;
+  }
+  .btn-remove:hover { border-color: #e55; color: #e55; }
+
+  /* ── Options Panel ── */
+  .options-panel {
+    background: white;
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .panel-header {
+    padding: 18px 24px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .panel-header span { font-size: 20px; }
+  .panel-header h2 {
+    font-size: 16px;
+    font-weight: 600;
+  }
+  .options-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+  }
+  .option-item {
+    padding: 18px 24px;
+    border-bottom: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+  }
+  .option-item:nth-child(even) { border-right: none; }
+  .option-item:nth-last-child(-n+2) { border-bottom: none; }
+  .option-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin-bottom: 8px;
+  }
+  select, .toggle-row {
+    width: 100%;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 15px;
+    color: var(--ink);
+    background: var(--cream);
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 14px;
+    appearance: none;
+    cursor: pointer;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  select:focus { border-color: var(--accent); }
+  .select-wrap { position: relative; }
+  .select-wrap::after {
+    content: '⌄';
+    position: absolute;
+    right: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--muted);
+    pointer-events: none;
+    font-size: 16px;
+  }
+  .toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 14px;
+    cursor: default;
+  }
+  .toggle {
+    position: relative;
+    width: 44px; height: 26px;
+    cursor: pointer;
+  }
+  .toggle input { opacity: 0; width: 0; height: 0; }
+  .slider {
+    position: absolute;
+    inset: 0;
+    background: var(--border);
+    border-radius: 50px;
+    transition: background 0.2s;
+  }
+  .slider::before {
+    content: '';
+    position: absolute;
+    width: 20px; height: 20px;
+    left: 3px; bottom: 3px;
+    background: white;
+    border-radius: 50%;
+    transition: transform 0.2s;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+  }
+  .toggle input:checked + .slider { background: var(--accent); }
+  .toggle input:checked + .slider::before { transform: translateX(18px); }
+
+  /* ── Convert Button ── */
+  .btn-convert {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    width: 100%;
+    background: var(--accent);
+    color: white;
+    border: none;
+    padding: 20px;
+    border-radius: var(--radius);
+    font-family: 'DM Serif Display', serif;
+    font-size: 22px;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    box-shadow: 0 8px 32px rgba(200,80,26,0.25);
+    -webkit-tap-highlight-color: transparent;
+  }
+  .btn-convert:hover:not(:disabled) {
+    background: #b03f0e;
+    transform: translateY(-2px);
+    box-shadow: 0 12px 40px rgba(200,80,26,0.35);
+  }
+  .btn-convert:active:not(:disabled) { transform: translateY(0); }
+  .btn-convert:disabled {
+    background: var(--border);
+    color: var(--muted);
+    cursor: not-allowed;
+    box-shadow: none;
+    transform: none;
+  }
+
+  /* ── Progress ── */
+  .progress-wrap {
+    background: white;
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius);
+    padding: 28px 24px;
+    text-align: center;
+    animation: slideIn 0.3s ease;
+  }
+  .progress-label {
+    font-size: 15px;
+    color: var(--muted);
+    margin-bottom: 16px;
+  }
+  .progress-bar-track {
+    height: 6px;
+    background: var(--cream);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-bottom: 8px;
+  }
+  .progress-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--gold));
+    border-radius: 3px;
+    transition: width 0.4s ease;
+    width: 0%;
+  }
+  .progress-pct {
+    font-size: 13px;
+    color: var(--muted);
+  }
+
+  /* ── Success ── */
+  .success-card {
+    background: #edf7f1;
+    border: 1.5px solid #a8d8b9;
+    border-radius: var(--radius);
+    padding: 32px 24px;
+    text-align: center;
+    animation: slideIn 0.4s ease;
+  }
+  .success-icon {
+    font-size: 52px;
+    margin-bottom: 12px;
+    display: block;
+  }
+  .success-title {
+    font-family: 'DM Serif Display', serif;
+    font-size: 24px;
+    color: var(--success);
+    margin-bottom: 6px;
+  }
+  .success-sub {
+    font-size: 14px;
+    color: #5a9e72;
+    margin-bottom: 24px;
+  }
+  .btn-again {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: white;
+    color: var(--ink);
+    border: 1.5px solid var(--border);
+    padding: 12px 24px;
+    border-radius: 50px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .btn-again:hover { border-color: var(--ink); transform: scale(1.02); }
+
+  /* ── Error ── */
+  .error-card {
+    background: #fff4f2;
+    border: 1.5px solid #f4b8a8;
+    border-radius: var(--radius);
+    padding: 20px 24px;
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    animation: slideIn 0.3s ease;
+  }
+  .error-card span:first-child { font-size: 22px; flex-shrink: 0; }
+  .error-text strong { display: block; font-size: 15px; margin-bottom: 4px; color: #c0392b; }
+  .error-text p { font-size: 13px; color: #9e6450; }
+
+  /* ── Tip ── */
+  .tip {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    padding: 14px 18px;
+    background: var(--accent-light);
+    border-radius: 12px;
+    font-size: 13px;
+    color: #8a4020;
+  }
+  .tip span { font-size: 18px; flex-shrink: 0; }
+
+
+  .btn-folder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    width: 100%;
+    background: white;
+    color: var(--ink);
+    border: 2px solid var(--ink);
+    padding: 16px;
+    border-radius: var(--radius);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 17px;
+    font-weight: 500;
+    cursor: pointer;
+    text-decoration: none;
+    transition: all 0.2s ease;
+    -webkit-tap-highlight-color: transparent;
+    animation: slideIn 0.3s ease;
+  }
+  .btn-folder:hover { background: var(--cream); transform: translateY(-1px); }
+  .btn-folder:active { transform: translateY(0); }
+
+  /* ── Success Actions ── */
+  .success-actions {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .btn-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 13px 22px;
+    border-radius: 50px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 15px;
+    font-weight: 500;
+    cursor: pointer;
+    border: none;
+    transition: all 0.2s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .btn-preview {
+    background: white;
+    color: var(--ink);
+    border: 2px solid var(--ink);
+  }
+  .btn-preview:hover { background: var(--cream); }
+  .btn-save {
+    background: var(--accent);
+    color: white;
+    box-shadow: 0 4px 16px rgba(200,80,26,0.25);
+  }
+  .btn-save:hover { background: #b03f0e; transform: translateY(-1px); }
+  .btn-save:active { transform: translateY(0); }
+
+  /* ── Modal ── */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(26,20,16,0.7);
+    backdrop-filter: blur(4px);
+    z-index: 1000;
+    display: flex;
+    align-items: flex-end;
+    animation: fadeIn 0.2s ease;
+  }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  .modal-box {
+    width: 100%;
+    height: 92vh;
+    background: white;
+    border-radius: 24px 24px 0 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    animation: slideUp 0.3s ease;
+  }
+  @keyframes slideUp {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+  }
+  .modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 20px;
+    border-bottom: 1px solid var(--border);
+    font-weight: 600;
+    font-size: 15px;
+    background: var(--cream);
+  }
+  .modal-close {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    border: none;
+    background: var(--border);
+    font-size: 16px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .preview-frame {
+    flex: 1;
+    border: none;
+    width: 100%;
+    background: #f5f5f5;
+  }
+  .modal-footer {
+    padding: 16px 20px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: center;
+  }
+  .modal-footer .btn-save { width: 100%; max-width: 320px; justify-content: center; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo-mark">D</div>
+  <div class="header-text">
+    <h1>DocFlow</h1>
+    <p>Word → PDF コンバーター for iPad</p>
+  </div>
+</header>
+
+<main>
+
+  <!-- Drop Zone -->
+  <div class="drop-zone" id="dropZone">
+    <div class="drop-icon">📄</div>
+    <div class="drop-title">ファイルをここにドロップ</div>
+    <div class="drop-sub">Word文書（.docx）に対応しています</div>
+    <button class="btn-browse" onclick="document.getElementById('fileInput').click()">
+      📂 ファイルを選択
+    </button>
+    <input type="file" id="fileInput" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document">
+  </div>
+
+  <!-- File Card -->
+  <div class="file-card hidden" id="fileCard">
+    <div class="file-icon">📝</div>
+    <div class="file-info">
+      <div class="file-name" id="fileName">—</div>
+      <div class="file-size" id="fileSize">—</div>
+    </div>
+    <button class="btn-remove" onclick="resetFile()" title="削除">✕</button>
+  </div>
+
+  <!-- Options -->
+  <div class="options-panel">
+    <div class="panel-header">
+      <span>⚙️</span>
+      <h2>変換オプション</h2>
+    </div>
+    <div class="options-grid">
+      <div class="option-item">
+        <div class="option-label">用紙サイズ</div>
+        <div class="select-wrap">
+          <select id="optPaper">
+            <option value="a4">A4</option>
+            <option value="letter">Letter</option>
+            <option value="a3">A3</option>
+          </select>
+        </div>
+      </div>
+      <div class="option-item">
+        <div class="option-label">向き</div>
+        <div class="select-wrap">
+          <select id="optOrientation">
+            <option value="portrait">縦（Portrait）</option>
+            <option value="landscape">横（Landscape）</option>
+          </select>
+        </div>
+      </div>
+      <div class="option-item">
+        <div class="option-label">余白</div>
+        <div class="select-wrap">
+          <select id="optMargin">
+            <option value="normal">標準</option>
+            <option value="narrow">狭い</option>
+            <option value="wide">広い</option>
+          </select>
+        </div>
+      </div>
+      <div class="option-item">
+        <div class="option-label">画質</div>
+        <div class="select-wrap">
+          <select id="optQuality">
+            <option value="2">高品質</option>
+            <option value="1">標準</option>
+            <option value="3">最高品質</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Error -->
+  <div class="error-card hidden" id="errorCard">
+    <span>⚠️</span>
+    <div class="error-text">
+      <strong>変換エラー</strong>
+      <p id="errorMsg">—</p>
+    </div>
+  </div>
+
+  <!-- Progress -->
+  <div class="progress-wrap hidden" id="progressWrap">
+    <div class="progress-label" id="progressLabel">変換中...</div>
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" id="progressFill"></div>
+    </div>
+    <div class="progress-pct" id="progressPct">0%</div>
+  </div>
+
+  <!-- Success -->
+  <div class="success-card hidden" id="successCard">
+    <span class="success-icon">✅</span>
+    <div class="success-title">変換完了！</div>
+    <div class="success-sub" id="successMsg">PDFを保存しました</div>
+    <div class="success-actions">
+      <button class="btn-action btn-preview" onclick="openPreview()">
+        <span>👁</span> PDFをプレビュー
+      </button>
+      <button class="btn-action btn-save" onclick="savePdf()">
+        <span>💾</span> 保存先を選ぶ
+      </button>
+    </div>
+    <button class="btn-again" onclick="resetAll()">🔄 別のファイルを変換</button>
+  </div>
+
+  <!-- PDF Preview Modal -->
+  <div class="modal-overlay hidden" id="previewModal">
+    <div class="modal-box">
+      <div class="modal-header">
+        <span id="previewTitle">preview.pdf</span>
+        <button class="modal-close" onclick="closePreview()">✕</button>
+      </div>
+      <iframe id="previewFrame" class="preview-frame"></iframe>
+      <div class="modal-footer">
+        <button class="btn-action btn-save" onclick="savePdf()">
+          <span>💾</span> 保存先を選ぶ
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Convert Button -->
+  <button class="btn-convert" id="btnConvert" disabled onclick="startConvert()">
+    <span>🚀</span> PDFに変換する
+  </button>
+
+  <div class="tip">
+    <span>💡</span>
+    <span id="tipText">変換後、プレビューを確認してから好きなフォルダに保存できます。</span>
+  </div>
+
+</main>
+
+<script>
+let selectedFile = null;
+let isConverting = false;
+
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+const fileCard = document.getElementById('fileCard');
+const fileName = document.getElementById('fileName');
+const fileSize = document.getElementById('fileSize');
+const btnConvert = document.getElementById('btnConvert');
+const progressWrap = document.getElementById('progressWrap');
+const progressFill = document.getElementById('progressFill');
+const progressLabel = document.getElementById('progressLabel');
+const progressPct = document.getElementById('progressPct');
+const successCard = document.getElementById('successCard');
+const successMsg = document.getElementById('successMsg');
+const errorCard = document.getElementById('errorCard');
+const errorMsg = document.getElementById('errorMsg');
+
+// Drag & Drop
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  const f = e.dataTransfer.files[0];
+  if (f) handleFile(f);
+});
+fileInput.addEventListener('change', e => {
+  if (e.target.files[0]) handleFile(e.target.files[0]);
+});
+
+function handleFile(file) {
+  if (!file.name.toLowerCase().endsWith('.docx')) {
+    showError('.docxファイルのみ対応しています。');
+    return;
+  }
+  selectedFile = file;
+  fileName.textContent = file.name;
+  fileSize.textContent = formatSize(file.size);
+  fileCard.classList.remove('hidden');
+  dropZone.classList.add('has-file');
+  dropZone.querySelector('.drop-title').textContent = '別のファイルをドロップして置換';
+  btnConvert.disabled = false;
+  errorCard.classList.add('hidden');
+  successCard.classList.add('hidden');
+}
+
+function formatSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+function resetFile() {
+  selectedFile = null;
+  fileCard.classList.add('hidden');
+  dropZone.classList.remove('has-file');
+  dropZone.querySelector('.drop-title').textContent = 'ファイルをここにドロップ';
+  btnConvert.disabled = true;
+  fileInput.value = '';
+  errorCard.classList.add('hidden');
+}
+
+
+// PDF Blob を保持
+let currentPdfBlob = null;
+let currentBaseName = '';
+
+function openPreview() {
+  if (!currentPdfBlob) return;
+  const url = URL.createObjectURL(currentPdfBlob);
+  const frame = document.getElementById('previewFrame');
+  frame.src = url;
+  document.getElementById('previewTitle').textContent = currentBaseName + '.pdf';
+  document.getElementById('previewModal').classList.remove('hidden');
+}
+
+function closePreview() {
+  document.getElementById('previewModal').classList.add('hidden');
+  const frame = document.getElementById('previewFrame');
+  // Revokeして新しいURLを毎回発行（メモリ節約）
+  URL.revokeObjectURL(frame.src);
+  frame.src = '';
+}
+
+async function savePdf() {
+  if (!currentPdfBlob) return;
+  const fileName = currentBaseName + '.pdf';
+
+  // iOS Safari: Web Share API（保存先フォルダを選べる）
+  if (navigator.share && navigator.canShare) {
+    const file = new File([currentPdfBlob], fileName, { type: 'application/pdf' });
+    if (navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title: fileName });
+        document.getElementById('tipText').textContent = '✅ 保存完了！ファイルアプリで確認できます。';
+        return;
+      } catch(e) {
+        if (e.name === 'AbortError') return; // ユーザーがキャンセル
+      }
+    }
+  }
+
+  // フォールバック: 通常ダウンロード
+  const url = URL.createObjectURL(currentPdfBlob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  document.getElementById('tipText').innerHTML = '📲 Safariのアドレスバー右の <strong>↓</strong> ボタンからもダウンロード済みファイルを確認できます。';
+}
+function resetAll() {
+  resetFile();
+  successCard.classList.add('hidden');
+  progressWrap.classList.add('hidden');
+  closePreview();
+  document.getElementById('previewModal').classList.add('hidden');
+  currentPdfBlob = null;
+  currentBaseName = '';
+  document.getElementById('tipText').textContent = '変換後、プレビューを確認してから好きなフォルダに保存できます。';
+}
+
+function showError(msg) {
+  errorCard.classList.remove('hidden');
+  errorMsg.textContent = msg;
+  successCard.classList.add('hidden');
+  progressWrap.classList.add('hidden');
+}
+
+function setProgress(pct, label) {
+  progressFill.style.width = pct + '%';
+  progressPct.textContent = pct + '%';
+  progressLabel.textContent = label;
+}
+
+const marginMap = { normal: 10, narrow: 5, wide: 20 };
+
+async function startConvert() {
+  if (!selectedFile || isConverting) return;
+  isConverting = true;
+  btnConvert.disabled = true;
+  errorCard.classList.add('hidden');
+  successCard.classList.add('hidden');
+  progressWrap.classList.remove('hidden');
+  setProgress(10, 'Wordファイルを読み込んでいます...');
+
+  try {
+    // Read file
+    const arrayBuffer = await selectedFile.arrayBuffer();
+    setProgress(30, 'HTMLに変換中...');
+
+    // Convert DOCX → HTML using mammoth
+    const result = await mammoth.convertToHtml({ arrayBuffer });
+    const html = result.value;
+
+    setProgress(55, 'PDFを生成中...');
+
+    // Build styled HTML container
+    const paper = document.getElementById('optPaper').value;
+    const orientation = document.getElementById('optOrientation').value;
+    const margin = marginMap[document.getElementById('optMargin').value];
+    const scale = parseInt(document.getElementById('optQuality').value);
+
+    const container = document.createElement('div');
+    container.style.cssText = `
+      font-family: 'Hiragino Sans', 'Meiryo', sans-serif;
+      font-size: 11pt;
+      line-height: 1.7;
+      color: #1a1a1a;
+      padding: 0;
+    `;
+    container.innerHTML = html;
+    // Style headings
+    container.querySelectorAll('h1').forEach(el => {
+      el.style.cssText = 'font-size:20pt;font-weight:700;margin:16pt 0 8pt;border-bottom:2px solid #c8501a;padding-bottom:6pt;';
+    });
+    container.querySelectorAll('h2').forEach(el => {
+      el.style.cssText = 'font-size:15pt;font-weight:700;margin:14pt 0 6pt;';
+    });
+    container.querySelectorAll('h3,h4').forEach(el => {
+      el.style.cssText = 'font-size:12pt;font-weight:600;margin:10pt 0 4pt;';
+    });
+    container.querySelectorAll('p').forEach(el => {
+      el.style.cssText = 'margin:0 0 8pt;';
+    });
+    container.querySelectorAll('table').forEach(el => {
+      el.style.cssText = 'border-collapse:collapse;width:100%;margin:10pt 0;font-size:10pt;';
+      el.querySelectorAll('td,th').forEach(cell => {
+        cell.style.cssText = 'border:1px solid #ccc;padding:5pt 8pt;';
+      });
+    });
+    container.querySelectorAll('ul,ol').forEach(el => {
+      el.style.cssText = 'margin:0 0 8pt;padding-left:20pt;';
+    });
+
+    document.body.appendChild(container);
+    container.style.position = 'absolute';
+    container.style.left = '-9999px';
+
+    setProgress(70, 'PDF出力中...');
+
+    // Paper dimensions
+    const formatMap = { a4: 'a4', letter: 'letter', a3: 'a3' };
+    const dims = {
+      a4: [210, 297], letter: [215.9, 279.4], a3: [297, 420]
+    };
+    let [w, h] = dims[paper] || [210, 297];
+    if (orientation === 'landscape') [w, h] = [h, w];
+
+    const baseName = selectedFile.name.replace(/\.docx$/i, '');
+
+    const pdfBlob = await html2pdf().set({
+      margin: margin,
+      filename: baseName + '.pdf',
+      html2canvas: { scale, useCORS: true, logging: false },
+      jsPDF: { unit: 'mm', format: formatMap[paper] || 'a4', orientation }
+    }).from(container).outputPdf('blob');
+
+    document.body.removeChild(container);
+
+    // Blobを保持
+    currentPdfBlob = pdfBlob;
+    currentBaseName = baseName;
+
+    setProgress(100, '完了！');
+
+    setTimeout(() => {
+      progressWrap.classList.add('hidden');
+      successCard.classList.remove('hidden');
+      successMsg.textContent = `「${baseName}.pdf」の変換が完了しました`;
+      isConverting = false;
+      btnConvert.disabled = false;
+    }, 600);
+
+  } catch (err) {
+    console.error(err);
+    progressWrap.classList.add('hidden');
+    showError('変換に失敗しました: ' + (err.message || 'ファイルを確認してください'));
+    isConverting = false;
+    btnConvert.disabled = false;
+  }
+}
+</script>
+</body>
+</html>
